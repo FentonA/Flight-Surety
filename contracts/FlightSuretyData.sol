@@ -19,6 +19,7 @@ contract FlightSuretyData {
     address private contractOwner;                                      // Account used to deploy contract
     bool private operational = true;                                    // Blocks all state changes throughout the contract if false
 
+    uint256 constant public insurancePrice = 1 ether;
     // struct to set our insurance clients
 
     struct Insurance{
@@ -28,7 +29,7 @@ contract FlightSuretyData {
         uint256 totalAmountInsured;
     }
 
-    mapping(byte32 => Insurance)insurances;
+    mapping(bytes32 => Insurance) insurances;
 
     //mapping to set and keep list of authorized callers to this contract
     mapping(address => bool) private authorizeCallers;
@@ -43,7 +44,7 @@ contract FlightSuretyData {
     */
     constructor() public {
         contractOwner = msg.sender;
-        _addAirline("American", contractOwner, true);
+        _addAirline("American", contractOwner);
     }
 
     /********************************************************************************************/
@@ -79,7 +80,7 @@ contract FlightSuretyData {
 
     //modifer that onyl allows authorized callers to call the external function on this contract
     modifier requireAuthorizedCaller(){
-        require([authorizeCallers[msg.sender] == true, "You are not authorized to call functions on this contract");
+        require(authorizeCallers[msg.sender] == true, "You are not authorized to call functions on this contract");
         _;
     }
     /********************************************************************************************/
@@ -92,7 +93,7 @@ contract FlightSuretyData {
     * @return A bool that is the current operating status
     */      
 
-    function isOperational() public view returns(bool) {
+    function isOperational() external view returns(bool) {
         return operational;
     }
 
@@ -109,11 +110,11 @@ contract FlightSuretyData {
         operational = mode;
     }
 
-    function isAirline(address airlineAccount) external view return (bool) {
+    function isAirline(address airlineAccount) external view returns(bool) {
         return airlines[airlineAccount].isRegistered;
     }
 
-    function getAirlineCount() external view return (uint256) {
+    function getAirlineCount() external view returns(uint256) {
         return airlineCount;
     }
 
@@ -128,12 +129,12 @@ contract FlightSuretyData {
     */   
     function _addAirline(string _airlineName, address _account) internal registeredOnly {
         // require(!airlines[_account], "This Airline has already been added");
-        airlines[_account] = Ailrine(_airlineName, _account, true);
-        airlineCount.add(1)
+        airlines[_account] = Airline(_airlineName, _account, true);
+        airlineCount.add(1);
     }
 
      function registerAirline( string _airlineName, address _airlineAccount) external {
-        _addAirlines(_airlineName, _airlineAccount );
+        _addAirline(_airlineName, _airlineAccount );
         
     }
 
@@ -142,7 +143,7 @@ contract FlightSuretyData {
     *
     */   
     function buy() external payable{
-
+        require(msg.value >= insurancePrice, "not enough ether to purchase this insurance" );
     }
 
     /**

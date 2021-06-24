@@ -27,16 +27,17 @@ contract FlightSuretyApp {
     uint8 private constant  FIRST_ADMINS = 4;
 
     address private contractOwner;          // Account used to deploy contract
-    FlightSuretyData flightSuretyData;
+    FlightSuretyData internal flightSuretyData;
 
     struct Flight {
+        string flightName;
         bool isRegistered;
         uint8 statusCode;
         uint256 updatedTimestamp;        
         address airline;
     }
     mapping(bytes32 => Flight) private flights;
-    mapping(address => uint245) votes;
+    mapping(address => uint256) registeredVotes;
     mapping(address =>mapping(address => bool))ballotList;
 
  
@@ -67,7 +68,7 @@ contract FlightSuretyApp {
     }
 
     modifier isAirline(){
-        require(flightSuretyData.isAirline(msg.sender, "This account isn't a registered airline");
+        require(flightSuretyData.isAirline(msg.sender), "This account isn't a registered airline");
         _;
     }
      
@@ -82,21 +83,26 @@ contract FlightSuretyApp {
     */
     constructor(address dataContract) public {
         contractOwner = msg.sender;
-        flightSuretyData(dataContract);
+        FlightSuretyData(dataContract);
     }
 
     /********************************************************************************************/
     /*                                       UTILITY FUNCTIONS                                  */
     /********************************************************************************************/
 
-    function isOperational() public pure returns(bool) {
+    function isOperational() public returns(bool) {
         return flightSuretyData.isOperational();  // Modify to call data contract's status
     }
 
     function addVote(address account) internal view isAirline {
         require(ballotList[account][msg.sender] == false, "This accuont has already voted");
         ballotList[account][msg.sender] = true;
-        votes[account] = votes[account].add(1);
+        registeredVotes[account] = registeredVotes[account].add(1);
+
+    }
+
+    function generateFlightKey( address airline, string flightName, uint256 timestamp) internal view returns(bytes32) {
+        return keccak256(abi.encodePacked(airline, flightName, timestamp));
 
     }
     /********************************************************************************************/
@@ -109,19 +115,19 @@ contract FlightSuretyApp {
     *
     */   
     function registerAirline(string _airlineName, address _airlineAccount )external  returns(bool success, uint256 votes){
-        require(!flightSuretyData.isAirline(_airAccount), "This airline is already registered");
-        airlineCount = flightSureData.getAirlineCount();
+        require(!flightSuretyData.isAirline(_airlineAccount), "This airline is already registered");
+        uint256 airlineCount = flightSuretyData.getAirlineCount();
         votes = 0;
         success = false;
         if(airlineCount <= FIRST_ADMINS){
             flightSuretyData.registerAirline(_airlineName, _airlineAccount);
             success = true;
         } else{
-            uint256 passingVotes = airlineCount.mul(100).(2);
-            addVotes(_airlineAccount)
-            votes = votes[_airlineAccount.mul(100)];
+            uint256 passingVotes = airlineCount.mul(100).div(2);
+            addVote(_airlineAccount);
+            votes = registeredVotes[_airlineAccount].mul(100);
             if(passingVotes >= votes){
-                flightDataSurety.registerAirline(_airlineName, _airlineAccount);
+                flightSuretyData.registerAirline(_airlineName, _airlineAccount);
                 success = true;
             }
         }
@@ -133,8 +139,19 @@ contract FlightSuretyApp {
     * @dev Register a future flight for insuring.
     *
     */  
-    function registerFlight()external pure{
+    function registerFlight(string _flightName, uint256 _timestamp )external {
+        bytes32 flightKey = generateFlightKey(msg.sender, _flightName, _timestamp);
+        flights[flightKey] = Flight(
+            _flightName,
+            true, 
+            STATUS_CODE_ON_TIME,
+            _timestamp,
+            msg.sender
+        );
+    }
 
+    function buyFlightInsurance() payable return(bool){
+        require(msg.value >= 1 ether, "You do not have enough funds to purchase this flight insurance");
     }
     
    /**
@@ -294,6 +311,9 @@ contract FlightSuretyApp {
 
 }   
 
-interface FlightSuretyDataApp{
+interface FlightSuretyData{
     function registerAirline( string _airlineName, address _airlineAccount) external;
+    function isAirline(address airlineAccount) external view returns(bool);
+    function getAirlineCount() external view returns(uint256);
+    function isOperational() external view returns(bool);
 }
