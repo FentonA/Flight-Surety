@@ -12,6 +12,8 @@ contract FlightSuretyData {
         string airlineName; 
         address account;
         bool isRegistered;
+        bool isFunded;
+        uint256 fund;
     }
 
     uint256 internal airlineCount = 0;
@@ -19,24 +21,40 @@ contract FlightSuretyData {
     address private contractOwner;                                      // Account used to deploy contract
     bool private operational = true;                                    // Blocks all state changes throughout the contract if false
 
-    uint256 constant public insurancePrice = 1 ether;
     // struct to set our insurance clients
 
     struct Insurance{
-        address insureeAddress;
-        uint256 inusranceCount;
-        address airlineInsured;
-        uint256 totalAmountInsured;
+        address insuredAccount;
+        string insuredFlight;
+        address airlineAccunt;
+        uint256 amountInsured;
+        uint256 timestamp;
     }
 
-    mapping(bytes32 => Insurance) insurances;
+    mapping(bytes32 => Insurance[]) insurances;
+
+    mapping(bytes32 => bool) private payoutCredit;
+
+    mapping(address =>uint256) private creditToInsure;
 
     //mapping to set and keep list of authorized callers to this contract
     mapping(address => bool) private authorizeCallers;
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
     /********************************************************************************************/
+    event AirlineRgistered(string airlineName, address indexed airline);
 
+    event PurchasedInsurance(address indexed ariline, uint256 amount);
+
+    event InsuranceCredited(address indexed insurance, string indexed flight, uint256 indexed timestamp);
+
+    event InsurancePaidFor(address indexed account, uint256 amount);
+
+    event AvailableCredit(address indexed airline, string indexed flightName, uint256 timestamp);
+
+    event AirlineFunded(address indexed airline, uint256 amountFunded);
+
+    event callAuthorized(address caller);
 
     /**
     * @dev Constructor
@@ -83,6 +101,10 @@ contract FlightSuretyData {
         require(authorizeCallers[msg.sender] == true, "You are not authorized to call functions on this contract");
         _;
     }
+    modifier isAirlineCheck(){
+        require(airlines[msg.sender].isRegistered == true, "This sender isn't a registered airline");
+        _;
+    }
     /********************************************************************************************/
     /*                                       UTILITY FUNCTIONS                                  */
     /********************************************************************************************/
@@ -118,6 +140,11 @@ contract FlightSuretyData {
         return airlineCount;
     }
 
+    function generateFlightKey( address airline, string flightName, uint256 timestamp) internal view returns(bytes32) {
+        return keccak256(abi.encodePacked(airline, flightName, timestamp));
+
+    }
+
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
@@ -129,27 +156,54 @@ contract FlightSuretyData {
     */   
     function _addAirline(string _airlineName, address _account) internal registeredOnly {
         // require(!airlines[_account], "This Airline has already been added");
-        airlines[_account] = Airline(_airlineName, _account, true);
+        airlines[_account] = Airline(_airlineName, _account, true, true, 0);
         airlineCount.add(1);
     }
 
      function registerAirline( string _airlineName, address _airlineAccount) external {
         _addAirline(_airlineName, _airlineAccount );
         
+        emit AirlineRgistered(_airlineName, _airlineAccount);
     }
 
    /**
     * @dev Buy insurance for a flight
     *
     */   
-    function buy() external payable{
-        require(msg.value >= insurancePrice, "not enough ether to purchase this insurance" );
+    function buy(address insuranceAccount, address _airline, string _flightName, uint256 timestamp) external payable{
+        require(msg.value >= 1 ether, "not enough ether to purchase this insurance" );
+        bytes32 flightKey = generateFlightKey(_airline, _flightName, timestamp);
+        airlines[_airline].fund = airlines[_airline].fund.add(msg.value);
+
+        insurances[flightKey].push(Insurance(
+            insuranceAccount, 
+            _flightName,
+            _airline,
+            msg.value,
+            timestamp
+        ));
+
+        emit PurchasedInsurance(_airline, msg.value);
     }
 
     /**
      *  @dev Credits payouts to insurees
     */
-    function creditInsurees() external pure{
+    function creditInsurees(string _flightName, uint256 _creditPercentage, address airline, uint256 timestamp) external requireAuthorizedCaller{
+        bytes32 flightKey = generateFlightKey(airline, _flightName, timestamp);
+        require(!payoutCredit[flightKey], "This has already been credited" );
+        
+        for(uint i = 0; i< insurances[flightKey].length; i++){
+            address insuredAccount = insurances[flightKey][i].insuredAccount;
+            uint256 amountCrdited = insurances[flightKey][i].amountInsured.mul(_creditPercentage).div(100);
+            creditToInsure[insuredAccount] = creditToInsure[insuredAccount].add(amountCrdited);
+            airlines[airline].fund = airlines[airline].fund.sub(amountCrdited);
+
+            emit InsuranceCredited(insuredAccount, _flightName, timestamp);
+
+        }
+        payoutCredit[flightKey] = true;
+        emit AvailableCredit(airline, _flightName, timestamp);
     }
     
 
@@ -157,7 +211,11 @@ contract FlightSuretyData {
      *  @dev Transfers eligible payout funds to insuree
      *
     */
-    function pay() external pure{
+    function pay(address insuree) external requireAuthorizedCaller{
+        uint paidAmount = creditToInsure[insuree];
+        delete(creditToInsure[insuree]);
+        insuree.transfer(paidAmount);
+        emit InsurancePaidFor( insuree, paidAmount);
     }
 
    /**
@@ -165,7 +223,13 @@ contract FlightSuretyData {
     *      resulting in insurance payouts, the contract should be self-sustaining
     *
     */   
-    function fund() public payable{
+    function fund(address airline) public payable requireAuthorizedCaller{
+       addFund(airline, msg.value);
+       airlines[airline].isFunded = true;    
+    }
+
+    function addFund(address airlineAccount, uint256 amountToFund) private {
+        airlines[airlineAccount].fund = airlines[airlineAccount].fund.add(amountToFund);
     }
 
     function getFlightKey(address airline, string memory flight, uint256 timestamp) pure internal returns(bytes32) {
@@ -177,7 +241,8 @@ contract FlightSuretyData {
     *
     */
     function() external payable {
-        fund();
+        fund(msg.sender);
+        airlines[msg.sender].isFunded = true;
     }
 
 

@@ -39,8 +39,15 @@ contract FlightSuretyApp {
     mapping(bytes32 => Flight) private flights;
     mapping(address => uint256) registeredVotes;
     mapping(address =>mapping(address => bool))ballotList;
+    
+     /********************************************************************************************/
+    /*                                       Events                                               */
+    /********************************************************************************************/
+    event FlightRegistered(address airline, string airlineName, uint256 timestamp);
 
- 
+    event AirlineRegistered(bool success, uint256 votes);
+
+    event AdminsVoted(address airline, uint256 votes);
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
     /********************************************************************************************/
@@ -55,7 +62,7 @@ contract FlightSuretyApp {
     */
     modifier requireIsOperational() {
          // Modify to call data contract's status
-        require(true, "Contract is currently not operational");  
+        require(isOperational(), "Contract is currently not operational");  
         _;  // All modifiers require an "_" which indicates where the function body will be added
     }
 
@@ -67,11 +74,15 @@ contract FlightSuretyApp {
         _;
     }
 
-    modifier isAirline(){
+    modifier isAirlineCheck(){
         require(flightSuretyData.isAirline(msg.sender), "This account isn't a registered airline");
         _;
     }
-     
+    modifier isUpcomingFlight(uint256 timestamp){
+        require(timestamp > block.timestamp, "Flight is not scheduled to fly in the near future");
+        _;
+    }
+
 
     /********************************************************************************************/
     /*                                       CONSTRUCTOR                                        */
@@ -94,7 +105,7 @@ contract FlightSuretyApp {
         return flightSuretyData.isOperational();  // Modify to call data contract's status
     }
 
-    function addVote(address account) internal view isAirline {
+    function addVote(address account) internal view isAirlineCheck {
         require(ballotList[account][msg.sender] == false, "This accuont has already voted");
         ballotList[account][msg.sender] = true;
         registeredVotes[account] = registeredVotes[account].add(1);
@@ -150,8 +161,11 @@ contract FlightSuretyApp {
         );
     }
 
-    function buyFlightInsurance() payable return(bool){
+    function buyFlightInsurance(address airline, string flightName, uint256 timestamp) payable returns(bool){
         require(msg.value >= 1 ether, "You do not have enough funds to purchase this flight insurance");
+        bytes32 flightKey = generateFlightKey(airline, flightName, timestamp);
+        require(flights[flightKey].isRegistered == true, "This flight has not been registered");
+        flightSuretyData.buy.value(msg.value)(msg.sender, airline, flightName, timestamp);
     }
     
    /**
@@ -316,4 +330,5 @@ interface FlightSuretyData{
     function isAirline(address airlineAccount) external view returns(bool);
     function getAirlineCount() external view returns(uint256);
     function isOperational() external view returns(bool);
+    function buy(address insuranceAccount, address _airline, string _flightName, uint256 timestamp) external payable;
 }
