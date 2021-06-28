@@ -232,7 +232,7 @@ contract FlightSuretyData {
         airlines[airlineAccount].fund = airlines[airlineAccount].fund.add(amountToFund);
     }
 
-    function getFlightKey(address airline, string memory flight, uint256 timestamp) pure internal returns(bytes32) {
+    function getFlightKey(address airline, string memory flight, uint256 timestamp) internal returns(bytes32) {
         return keccak256(abi.encodePacked(airline, flight, timestamp));
     }
 

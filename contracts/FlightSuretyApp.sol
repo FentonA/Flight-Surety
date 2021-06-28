@@ -116,6 +116,10 @@ contract FlightSuretyApp {
         return keccak256(abi.encodePacked(airline, flightName, timestamp));
 
     }
+
+    function fund() external payable{
+        flightSuretyData.fund.value(msg.value)(msg.sender);
+    }
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
@@ -161,7 +165,7 @@ contract FlightSuretyApp {
         );
     }
 
-    function buyFlightInsurance(address airline, string flightName, uint256 timestamp) payable returns(bool){
+    function buyFlightInsurance(address airline, string flightName, uint256 timestamp) requireIsOperational external payable {
         require(msg.value >= 1 ether, "You do not have enough funds to purchase this flight insurance");
         bytes32 flightKey = generateFlightKey(airline, flightName, timestamp);
         require(flights[flightKey].isRegistered == true, "This flight has not been registered");
@@ -172,7 +176,10 @@ contract FlightSuretyApp {
     * @dev Called after oracle has updated flight status
     *
     */  
-    function processFlightStatus(address airline, string memory flight, uint256 timestamp, uint8 statusCode) internal pure {
+    function processFlightStatus(address airline, string memory flight, uint256 timestamp, uint8 statusCode) internal {
+        bytes32 flightKey = generateFlightKey(airline, flight, timestamp);
+        flights[flightKey].updatedTimestamp = block.timestamp;
+        flights[flightKey].statusCode = statusCode;
     }
 
 
@@ -283,7 +290,7 @@ contract FlightSuretyApp {
     }
 
 
-    function getFlightKey(address airline, string flight, uint256 timestamp) pure internal returns(bytes32) {
+    function getFlightKey(address airline, string flight, uint256 timestamp) internal returns(bytes32) {
         return keccak256(abi.encodePacked(airline, flight, timestamp));
     }
 
@@ -331,4 +338,5 @@ interface FlightSuretyData{
     function getAirlineCount() external view returns(uint256);
     function isOperational() external view returns(bool);
     function buy(address insuranceAccount, address _airline, string _flightName, uint256 timestamp) external payable;
+    function fund(address airline) public payable;
 }
